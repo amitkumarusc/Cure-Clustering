@@ -1,16 +1,20 @@
-#!/usr/bin/python
-# coding: utf-8
-
 import sys
 import heapq as hq
 import numpy as np
 import itertools
 from random import shuffle
-from matplotlib import pyplot as plt
 
-def readDataset():
+debug = False
+
+try:
+	if debug:
+		from matplotlib import pyplot as plt
+except:
+	debug = False
+
+def readDataset(data_file):
 	data = {'x_data': [], 'y_data': []}
-	with open('iris.dat') as file_handle:
+	with open(data_file) as file_handle:
 		lines = file_handle.readlines()
 		for line in lines:
 			point = line.strip().split(',')
@@ -20,6 +24,48 @@ def readDataset():
 			data['x_data'].append(point)
 			data['y_data'].append(label)
 	return data
+
+def readSample(sample_file):
+	data = {'x_data': [], 'y_data': []}
+	with open(data_file) as file_handle:
+		lines = file_handle.readlines()
+		for line in lines:
+			point = line.strip().split(',')
+			label = point[-1]
+			point = point[:-1]
+			point = map(float, point)
+			data['x_data'].append(point)
+			data['y_data'].append(label)
+	return data
+
+def calculateMetrics(pred_clusters, true_labels_arr):
+	true_labels = {}
+	for index, true_label in enumerate(true_labels_arr):
+		if true_label in true_labels:
+			true_labels[true_label].append(index)
+		else:
+			true_labels[true_label] = [index]
+	true_labels = true_labels.values()
+	true_label_pairs = []
+	for true_cluster in true_labels:
+		true_cluster.sort()
+		true_label_pairs += itertools.combinations(true_cluster, 2)
+	
+	pred_label_pairs = []
+	for pred_cluster in pred_clusters:
+		pred_cluster.sort()
+		pred_label_pairs += itertools.combinations(pred_cluster, 2)
+	print len(true_label_pairs), len(pred_label_pairs)
+	true_label_pairs = set(true_label_pairs)
+	pred_label_pairs = set(pred_label_pairs)
+	print len(true_label_pairs), len(pred_label_pairs)
+	
+	precision = len(pred_label_pairs.intersection(true_label_pairs))/(1.0*len(pred_label_pairs))
+	recall = len(pred_label_pairs.intersection(true_label_pairs))/(1.0*len(true_label_pairs))
+	f1 = 2*precision*recall/(precision+recall)
+	print "Precision: %0.2f, Recall: %0.2f"%(precision, recall)
+	print "F1 score: %0.2f"%(f1)
+	print '\n'
 
 
 def plotGoldStandards(i, j):
@@ -31,6 +77,8 @@ def plotGoldStandards(i, j):
 	plt.scatter(points[:, i], points[:,j], c=colors)
 	ax.legend()
 	plt.show()
+
+
 
 class Cluster(object):
 	COUNTER = 0
@@ -89,6 +137,8 @@ class Cluster(object):
 	
 	def __repr(self):
 		return self.__str__()
+	
+
 
 	@classmethod
 	def merge(cls, cluster1, cluster2):
@@ -97,12 +147,18 @@ class Cluster(object):
 		
 		combined_points = np.concatenate((cluster1.points, cluster2.points))
 		combined_p_ids = cluster1.p_ids + cluster2.p_ids
-
 		new_cluster = Cluster(combined_points, combined_p_ids, cluster1.rep_count, cluster1.alpha)
 		
 		new_cluster.mean = (cluster1.getMean()*cluster1.n_points + cluster2.getMean()*cluster2.n_points)/(new_cluster.n_points*1.0)
 
 		return new_cluster
+	
+	def pointToClusterDistance(self, point):
+		min_dist = sys.maxint
+		for rep_index in xrange(len(self.reps)):
+			dist = Cluster.p_distance(self.reps[rep_index], point)
+			min_dist = min(min_dist, dist)
+		return min_dist
 	
 	@staticmethod
 	def p_distance(point1, point2):
@@ -116,6 +172,7 @@ class Cluster(object):
 				dist = Cluster.p_distance(cluster1.reps[rep_1_index], cluster2.reps[rep_2_index])
 				min_dist = min(min_dist, dist)
 		return min_dist
+
 
 class HeirarchicalClustering(object):
 	def __init__(self, cluster_count, rep_count, alpha):
@@ -143,9 +200,25 @@ class HeirarchicalClustering(object):
 			self.rebuildClosestClusterLinks(new_cluster, u_cluster.id, v_cluster.id)
 			
 			self.clusters.append(new_cluster)
+	
+	def predict(self, points):
+		points = np.array(points)
+		predictions = {cluster.id:[] for cluster in self.clusters}
+		for i in range(len(points)):
+			label = self.predict_point(points[i])
+			predictions[label].append(i)
+		return predictions.values()
 
-	def predict(self):
-		pass
+	def predict_point(self, point):
+		point = np.array(point)
+		min_dist = sys.maxint
+		label = None
+		for i in range(len(self.clusters)):
+			dist = self.clusters[i].pointToClusterDistance(point)
+			if dist < min_dist:
+				min_dist = dist
+				label = self.clusters[i].id
+		return label
 	
 	def getMergeCandidate(self):
 		min_dist = sys.maxint
@@ -197,70 +270,46 @@ class HeirarchicalClustering(object):
 				return
 		print "Cluster not found : ", cluster.id, cluster.p_ids
 
-
-def gridSearch():
+def gridSearch(data, sample):
 	rep_counts = list(range(1, 6))
 	alphas = np.arange(0.1, 1, 0.1)
 	for rep_count in rep_counts:
 		for alpha in alphas:
-			hc = HeirarchicalClustering(3, rep_count, alpha)
-			hc.fit(data['x_data'])
+			hc = HeirarchicalClustering(cluster_count, rep_count, alpha)
+			hc.fit(sample['x_data'])
+			predictions = hc.predict(data['x_data'])
 			plotPoints(hc.clusters)
 			print 'RepCount: %d, Alpha: %f'%(rep_count, alpha)
-			
-
+			calculateMetrics(predictions, data['y_data'])
 
 def plotPoints(clusters):
-	f, ax = plt.subplots(1)
-	for i, cluster in enumerate(clusters):
-		points = np.array(cluster.points)
-		plt.scatter(points[:, 0], points[:, 2], label=i)
-	ax.legend()
-	plt.show()
-
-
-def calculatMetrics(pred_clusters, true_labels_arr):
-	true_labels = {}
-	for index, true_label in enumerate(true_labels_arr):
-		if true_label in true_labels:
-			true_labels[true_label].append(index)
-		else:
-			true_labels[true_label] = [index]
-	true_labels = true_labels.values()
-	true_label_pairs = []
-	for true_cluster in true_labels:
-		true_cluster.sort()
-		true_label_pairs += itertools.combinations(true_cluster, 2)
-	
-	pred_label_pairs = []
-	for pred_cluster in pred_clusters:
-		p_ids = pred_cluster.p_ids
-		p_ids.sort()
-		pred_label_pairs += itertools.combinations(p_ids, 2)
-	print len(true_label_pairs), len(pred_label_pairs)
-	true_label_pairs = set(true_label_pairs)
-	pred_label_pairs = set(pred_label_pairs)
-	print len(true_label_pairs), len(pred_label_pairs)
-	
-	precision = len(pred_label_pairs.intersection(true_label_pairs))/(1.0*len(pred_label_pairs))
-	recall = len(pred_label_pairs.intersection(true_label_pairs))/(1.0*len(true_label_pairs))
-	print "Precision: %0.2f, Recall: %0.2f"%(precision, recall)
-
+	if debug:
+		f, ax = plt.subplots(1)
+		for i, cluster in enumerate(clusters):
+			points = np.array(cluster.points)
+			plt.scatter(points[:, 0], points[:, 2], label=i)
+		ax.legend()
+		plt.show()
 
 if __name__ == '__main__':
-	data = readDataset()
-	cluster_count = 3
-	rep_count = 2
-	alpha = 0.8
+	
+	if len(sys.argv) < 6:
+		print 'Usage: python cure.py <k> <sample> <data-set> <n> <alpha>'
+		sys.exit(-1)
 
-	hc = HeirarchicalClustering(3, 2, 0.5)
-	hc.fit(data['x_data'])
-	plotPoints(hc.clusters)
+	cluster_count = int(sys.argv[1])
+	sample_file = sys.argv[2]
+	data_file = sys.argv[3]
+	rep_count = int(sys.argv[4])
+	alpha = float(sys.argv[5])
 
-	gridSearch()
+	data = readDataset(data_file)
+	sample = readSample(sample_file)
 
-	plotGoldStandards(0, 2)
+	# hc = HeirarchicalClustering(cluster_count, rep_count, alpha)
+	# hc.fit(sample['x_data'])
+	# predictions = hc.predict(data['x_data'])
+	# calculateMetrics(predictions, data['y_data'])
 
-	calculatMetrics(hc.clusters, data['y_data'])
-
+	gridSearch(data, sample)
 
