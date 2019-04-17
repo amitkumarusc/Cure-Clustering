@@ -1,16 +1,12 @@
+"""
+Name: Amit Kumar
+USC ID: 7088752227
+Email: kuma310@usc.edu
+"""
+
 import sys
-import heapq as hq
 import numpy as np
 import itertools
-from random import shuffle
-
-debug = False
-
-try:
-	if debug:
-		from matplotlib import pyplot as plt
-except:
-	debug = False
 
 def readDataset(data_file):
 	data = {'x_data': [], 'y_data': []}
@@ -26,17 +22,19 @@ def readDataset(data_file):
 	return data
 
 def readSample(sample_file):
-	data = {'x_data': [], 'y_data': []}
-	with open(data_file) as file_handle:
+	indexes = []
+	with open(sample_file) as file_handle:
 		lines = file_handle.readlines()
 		for line in lines:
-			point = line.strip().split(',')
-			label = point[-1]
-			point = point[:-1]
-			point = map(float, point)
-			data['x_data'].append(point)
-			data['y_data'].append(label)
-	return data
+			indexes.append(int(line.strip()))
+	return indexes
+
+def getSamplePoints(sample_indexes, data):
+	sample_data = {'x_data': [], 'y_data': []}
+	for index in sample_indexes:
+		sample_data['x_data'].append(data['x_data'][index])
+		sample_data['y_data'].append(data['y_data'][index])
+	return sample_data
 
 def calculateMetrics(pred_clusters, true_labels_arr):
 	true_labels = {}
@@ -52,33 +50,19 @@ def calculateMetrics(pred_clusters, true_labels_arr):
 		true_label_pairs += itertools.combinations(true_cluster, 2)
 	
 	pred_label_pairs = []
-	for pred_cluster in pred_clusters:
+	for index, pred_cluster in enumerate(pred_clusters):
 		pred_cluster.sort()
+		print 'Cluster %d: %s\n'%(index+1, str(pred_cluster))
 		pred_label_pairs += itertools.combinations(pred_cluster, 2)
-	print len(true_label_pairs), len(pred_label_pairs)
 	true_label_pairs = set(true_label_pairs)
 	pred_label_pairs = set(pred_label_pairs)
-	print len(true_label_pairs), len(pred_label_pairs)
 	
 	precision = len(pred_label_pairs.intersection(true_label_pairs))/(1.0*len(pred_label_pairs))
 	recall = len(pred_label_pairs.intersection(true_label_pairs))/(1.0*len(true_label_pairs))
 	f1 = 2*precision*recall/(precision+recall)
-	print "Precision: %0.2f, Recall: %0.2f"%(precision, recall)
-	print "F1 score: %0.2f"%(f1)
+	print "Precision: %f, Recall: %f"%(precision, recall)
+	print "F1 score: %f"%(f1)
 	print '\n'
-
-
-def plotGoldStandards(i, j):
-	points = np.array(data['x_data'])
-	labels = data['y_data']
-	mapping = {'Iris-setosa': 'red', 'Iris-versicolor': 'blue', 'Iris-virginica': 'green'}
-	colors = [mapping[label] for label in labels]
-	f, ax = plt.subplots(1)
-	plt.scatter(points[:, i], points[:,j], c=colors)
-	ax.legend()
-	plt.show()
-
-
 
 class Cluster(object):
 	COUNTER = 0
@@ -166,6 +150,8 @@ class Cluster(object):
 
 	@staticmethod
 	def c_distance(cluster1, cluster2):
+		# return Cluster.p_distance(cluster1.getMean(), cluster2.getMean())
+
 		min_dist = sys.maxint
 		for rep_1_index in xrange(len(cluster1.reps)):
 			for rep_2_index in xrange(len(cluster2.reps)):
@@ -268,28 +254,7 @@ class HeirarchicalClustering(object):
 				self.clusters[i] = self.clusters[-1]
 				self.clusters.pop()
 				return
-		print "Cluster not found : ", cluster.id, cluster.p_ids
-
-def gridSearch(data, sample):
-	rep_counts = list(range(1, 6))
-	alphas = np.arange(0.1, 1, 0.1)
-	for rep_count in rep_counts:
-		for alpha in alphas:
-			hc = HeirarchicalClustering(cluster_count, rep_count, alpha)
-			hc.fit(sample['x_data'])
-			predictions = hc.predict(data['x_data'])
-			plotPoints(hc.clusters)
-			print 'RepCount: %d, Alpha: %f'%(rep_count, alpha)
-			calculateMetrics(predictions, data['y_data'])
-
-def plotPoints(clusters):
-	if debug:
-		f, ax = plt.subplots(1)
-		for i, cluster in enumerate(clusters):
-			points = np.array(cluster.points)
-			plt.scatter(points[:, 0], points[:, 2], label=i)
-		ax.legend()
-		plt.show()
+		print("Cluster not found : ", cluster.id, cluster.p_ids)
 
 if __name__ == '__main__':
 	
@@ -304,12 +269,12 @@ if __name__ == '__main__':
 	alpha = float(sys.argv[5])
 
 	data = readDataset(data_file)
-	sample = readSample(sample_file)
+	sample_indexes = readSample(sample_file)
 
-	# hc = HeirarchicalClustering(cluster_count, rep_count, alpha)
-	# hc.fit(sample['x_data'])
-	# predictions = hc.predict(data['x_data'])
-	# calculateMetrics(predictions, data['y_data'])
+	sample = getSamplePoints(sample_indexes, data)
 
-	gridSearch(data, sample)
+	hc = HeirarchicalClustering(cluster_count, rep_count, alpha)
+	hc.fit(sample['x_data'])
+	predictions = hc.predict(data['x_data'])
+	calculateMetrics(predictions, data['y_data'])
 
