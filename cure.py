@@ -52,7 +52,7 @@ def calculateMetrics(pred_clusters, true_labels_arr):
 	pred_label_pairs = []
 	for index, pred_cluster in enumerate(pred_clusters):
 		pred_cluster.sort()
-		print 'Cluster %d: %s\n'%(index+1, str(pred_cluster))
+		print 'Cluster %d: %s'%(index+1, str(pred_cluster))
 		pred_label_pairs += itertools.combinations(pred_cluster, 2)
 	true_label_pairs = set(true_label_pairs)
 	pred_label_pairs = set(pred_label_pairs)
@@ -61,7 +61,7 @@ def calculateMetrics(pred_clusters, true_labels_arr):
 	recall = len(pred_label_pairs.intersection(true_label_pairs))/(1.0*len(true_label_pairs))
 	f1 = 2*precision*recall/(precision+recall)
 	print "Precision: %f, Recall: %f"%(precision, recall)
-	print "F1 score: %f"%(f1)
+	# print "F1 score: %f"%(f1)
 	print '\n'
 
 class Cluster(object):
@@ -150,7 +150,9 @@ class Cluster(object):
 
 	@staticmethod
 	def c_distance(cluster1, cluster2):
-		# return Cluster.p_distance(cluster1.getMean(), cluster2.getMean())
+		# Comment the line below if the distance between clusters is distance between their closest representatives
+		# There were contradicting statements in discussion forum and announcements.
+		return Cluster.p_distance(cluster1.getMean(), cluster2.getMean())
 
 		min_dist = sys.maxint
 		for rep_1_index in xrange(len(cluster1.reps)):
