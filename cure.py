@@ -151,7 +151,10 @@ class Cluster(object):
 
 	@staticmethod
 	def c_distance(cluster1, cluster2):
-		# return Cluster.p_distance(cluster1.getMean(), cluster2.getMean())
+
+		# Comment this line if the distance between clusters is distance between their closest clusters
+		# There were contradicting statements in discussion forum and announcements.
+		return Cluster.p_distance(cluster1.getMean(), cluster2.getMean())
 
 		min_dist = sys.maxint
 		for rep_1_index in xrange(len(cluster1.reps)):
@@ -194,14 +197,16 @@ class HeirarchicalClustering(object):
 			new_cluster = Cluster.merge(u_cluster, v_cluster)
 			
 			self.rebuildClosestClusterLinks(new_cluster, u_cluster.id, v_cluster.id)
+
+			# heapify(self.clusters)
 			
 			self.clusters.append([new_cluster.closestDist, new_cluster])
 
 			heapify(self.clusters)
 
-		for cluster in self.clusters:
-			print 'Reps : \n', cluster[1].reps
-			print 'Mean : \n', cluster[1].getMean()
+		# for cluster in self.clusters:
+		# 	print 'Reps : \n', cluster[1].reps
+		# 	print 'Mean : \n', cluster[1].getMean()
 	
 	def predict(self, points):
 		points = np.array(points)
@@ -262,13 +267,13 @@ class HeirarchicalClustering(object):
 					self.clusters[i][1].closestDist = new_dist
 					self.clusters[i][1].closest = new_cluster
 					self.clusters[i][0] = new_dist
-				heapify(self.clusters)
+				# heapify(self.clusters)
 			else:
 				if self.clusters[i][1].closestDist > new_dist:
 					self.clusters[i][1].closestDist = new_dist
 					self.clusters[i][1].closest = new_cluster
 					self.clusters[i][0] = new_dist
-					heapify(self.clusters)
+					# heapify(self.clusters)
 	
 	def removeCluster(self, cluster):
 		for i in range(len(self.clusters)):
