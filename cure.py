@@ -7,6 +7,7 @@ Email: kuma310@usc.edu
 import sys
 import numpy as np
 import itertools
+from heapq import *
 
 def readDataset(data_file):
 	data = {'x_data': [], 'y_data': []}
@@ -108,12 +109,12 @@ class Cluster(object):
 				else:
 					point = self.points[max_point]
 					reps = [point + self.alpha * (self.getMean() - point)]
-		reps = np.array(reps)
+		reps = np.stack(reps)
 		return reps
 			
 					
 	def getClosestDist(self, point, points):
-		points = np.array(points)
+		points = np.stack(points)
 		return min(np.sqrt(np.sum((points - point)**2, axis=1)))
 	
 	def __str__(self):
@@ -133,7 +134,7 @@ class Cluster(object):
 		combined_p_ids = cluster1.p_ids + cluster2.p_ids
 		new_cluster = Cluster(combined_points, combined_p_ids, cluster1.rep_count, cluster1.alpha)
 		
-		new_cluster.mean = (cluster1.getMean()*cluster1.n_points + cluster2.getMean()*cluster2.n_points)/(new_cluster.n_points*1.0)
+		# new_cluster.mean = (cluster1.getMean()*cluster1.n_points + cluster2.getMean()*cluster2.n_points)/(new_cluster.n_points*1.0)
 
 		return new_cluster
 	
@@ -167,29 +168,44 @@ class HeirarchicalClustering(object):
 		self.rep_count = rep_count
 		self.alpha = alpha
 
+	def createHeap(self):
+		pass
+
 	def fit(self, points):
 		for p_index, point in enumerate(points):
-			self.clusters.append(Cluster([point], [p_index], self.rep_count, self.alpha))
+			self.clusters.append([0, Cluster([point], [p_index], self.rep_count, self.alpha)])
 		
 		for index in xrange(len(self.clusters)):
-			self.assignClosestCluster(self.clusters[index])
+			dist, closest = self.assignClosestCluster(self.clusters[index][1])
+			self.clusters[index][0] = dist
+
+		heapify(self.clusters)
 			
 		while len(self.clusters) > self.cluster_count:
-			u_index = self.getMergeCandidate()
-			u_cluster = self.clusters.pop(u_index)
+			# u_index = self.getMergeCandidate()
+			# u_cluster = self.clusters.pop(u_index)
+			dist, u_cluster = heappop(self.clusters)
 			v_cluster = u_cluster.closest
 			
 			self.removeCluster(v_cluster)
+
+			heapify(self.clusters)
 			
 			new_cluster = Cluster.merge(u_cluster, v_cluster)
 			
 			self.rebuildClosestClusterLinks(new_cluster, u_cluster.id, v_cluster.id)
 			
-			self.clusters.append(new_cluster)
+			self.clusters.append([new_cluster.closestDist, new_cluster])
+
+			heapify(self.clusters)
+
+		for cluster in self.clusters:
+			print 'Reps : \n', cluster[1].reps
+			print 'Mean : \n', cluster[1].getMean()
 	
 	def predict(self, points):
 		points = np.array(points)
-		predictions = {cluster.id:[] for cluster in self.clusters}
+		predictions = {cluster[1].id:[] for cluster in self.clusters}
 		for i in range(len(points)):
 			label = self.predict_point(points[i])
 			predictions[label].append(i)
@@ -200,10 +216,10 @@ class HeirarchicalClustering(object):
 		min_dist = sys.maxint
 		label = None
 		for i in range(len(self.clusters)):
-			dist = self.clusters[i].pointToClusterDistance(point)
+			dist = self.clusters[i][1].pointToClusterDistance(point)
 			if dist < min_dist:
 				min_dist = dist
-				label = self.clusters[i].id
+				label = self.clusters[i][1].id
 		return label
 	
 	def getMergeCandidate(self):
@@ -220,37 +236,43 @@ class HeirarchicalClustering(object):
 		min_dist = sys.maxint
 		closest = None
 		for i in range(len(self.clusters)):
-			if cluster.id == self.clusters[i].id: continue
+			if cluster.id == self.clusters[i][1].id: continue
 			
-			dist = Cluster.c_distance(cluster, self.clusters[i])
+			dist = Cluster.c_distance(cluster, self.clusters[i][1])
 			if dist < min_dist:
 				min_dist = dist
-				closest = self.clusters[i]
+				closest = self.clusters[i][1]
 		cluster.closest = closest
 		cluster.closestDist = min_dist
+		return min_dist, closest
 
 	def rebuildClosestClusterLinks(self, new_cluster, cid_1, cid_2):
 		min_dist = sys.maxint
 		for i in range(len(self.clusters)):
-			new_dist = Cluster.c_distance(new_cluster, self.clusters[i])
+			new_dist = Cluster.c_distance(new_cluster, self.clusters[i][1])
 			if new_cluster.closestDist > new_dist:
 				new_cluster.closestDist = new_dist
-				new_cluster.closest = self.clusters[i]
+				new_cluster.closest = self.clusters[i][1]
 
-			if self.clusters[i].closest.id in (cid_1, cid_2):
-				if self.clusters[i].closestDist < new_dist:
-					self.assignClosestCluster(self.clusters[i])
+			if self.clusters[i][1].closest.id in (cid_1, cid_2):
+				if self.clusters[i][1].closestDist < new_dist:
+					dist, closest = self.assignClosestCluster(self.clusters[i][1])
+					self.clusters[i][0] = dist
 				else:
-					self.clusters[i].closestDist = new_dist
-					self.clusters[i].closest = new_cluster
+					self.clusters[i][1].closestDist = new_dist
+					self.clusters[i][1].closest = new_cluster
+					self.clusters[i][0] = new_dist
+				heapify(self.clusters)
 			else:
-				if self.clusters[i].closestDist > new_dist:
-					self.clusters[i].closestDist = new_dist
-					self.clusters[i].closest = new_cluster
+				if self.clusters[i][1].closestDist > new_dist:
+					self.clusters[i][1].closestDist = new_dist
+					self.clusters[i][1].closest = new_cluster
+					self.clusters[i][0] = new_dist
+					heapify(self.clusters)
 	
 	def removeCluster(self, cluster):
 		for i in range(len(self.clusters)):
-			if self.clusters[i].id == cluster.id:
+			if self.clusters[i][1].id == cluster.id:
 				self.clusters[i] = self.clusters[-1]
 				self.clusters.pop()
 				return
